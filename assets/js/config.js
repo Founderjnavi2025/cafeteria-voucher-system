@@ -7,8 +7,8 @@
  * - Device ID adalah identifier, bukan autentikasi perangkat.
  */
 window.CVS_CONFIG = {
-  SUPABASE_URL: (window.__ENV__ && window.__ENV__.SUPABASE_URL) || 'YOUR_SUPABASE_URL',
-  SUPABASE_ANON_KEY: (window.__ENV__ && window.__ENV__.SUPABASE_ANON_KEY) || 'YOUR_SUPABASE_ANON_KEY',
+  SUPABASE_URL: (window.__ENV__ && window.__ENV__.SUPABASE_URL) || 'https://yyztsmdanfkshudchfjr.supabase.co',
+  SUPABASE_ANON_KEY: (window.__ENV__ && window.__ENV__.SUPABASE_ANON_KEY) || 'sb_publishable_869TfCnLdbd3nchgS4st0A_DpPJ3HqO',
   APP_NAME: 'Cafeteria Voucher System',
   APP_VERSION: '1.0.0',
   DISPLAY_TIMEZONE: 'Asia/Jakarta',
