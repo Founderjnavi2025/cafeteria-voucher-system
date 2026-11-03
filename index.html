@@ -21,10 +21,21 @@
     </div>
   </div>
   <script>
-    (async () => {
-      const session = await CVSAuth.getSession();
+  (async () => {
+    try {
+      const session = await Promise.race([
+        CVSAuth.getSession(),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Session timeout')), 5000)
+        )
+      ]);
+
       window.location.replace(session ? '/dashboard' : '/login');
-    })();
-  </script>
+    } catch (error) {
+      console.error('Auth redirect:', error);
+      window.location.replace('/login');
+    }
+  })();
+</script>
 </body>
 </html>
