@@ -4,14 +4,14 @@
   "trailingSlash": false,
   "rewrites": [
     { "source": "/", "destination": "/index.html" },
-    { "source": "/login", "destination": "/pages/login.html" },
-    { "source": "/dashboard", "destination": "/pages/dashboard.html" },
-    { "source": "/employees", "destination": "/pages/employees.html" },
-    { "source": "/attendance", "destination": "/pages/attendance.html" },
-    { "source": "/eligibility", "destination": "/pages/eligibility.html" },
-    { "source": "/vouchers", "destination": "/pages/vouchers.html" },
-    { "source": "/scan", "destination": "/pages/scan.html" },
-    { "source": "/print-voucher", "destination": "/pages/print-voucher.html" }
+    { "source": "/login", "destination": "/pages/login" },
+    { "source": "/dashboard", "destination": "/pages/dashboard" },
+    { "source": "/employees", "destination": "/pages/employees" },
+    { "source": "/attendance", "destination": "/pages/attendance" },
+    { "source": "/eligibility", "destination": "/pages/eligibility" },
+    { "source": "/vouchers", "destination": "/pages/vouchers" },
+    { "source": "/scan", "destination": "/pages/scan" },
+    { "source": "/print-voucher", "destination": "/pages/print-voucher" }
   ],
   "headers": [
     {
