@@ -8,7 +8,7 @@
  */
 window.CVS_CONFIG = {
   SUPABASE_URL: (window.__ENV__ && window.__ENV__.SUPABASE_URL) || 'https://yyztsmdanfkshudchfjr.supabase.co',
-  SUPABASE_ANON_KEY: (window.__ENV__ && window.__ENV__.SUPABASE_ANON_KEY) || 'sb_publishable_869TfCnLdbd3nchgS4st0A_DpPJ3HqO',
+  SUPABASE_ANON_KEY: (window.__ENV__ && window.__ENV__.SUPABASE_ANON_KEY) || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl5enRzbWRhbmZrc2h1ZGNoZmpyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM2OTI3MTAsImV4cCI6MjEwOTI2ODcxMH0.j9s2PLFGpCeQ5_569DJq8xt8zUx-d9JNbrx4LyfrUEo',
   APP_NAME: 'Cafeteria Voucher System',
   APP_VERSION: '1.0.0',
   DISPLAY_TIMEZONE: 'Asia/Jakarta',
