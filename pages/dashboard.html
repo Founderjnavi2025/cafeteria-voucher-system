@@ -1,13 +1,34 @@
+
 <!DOCTYPE html>
 <html lang="id">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Dashboard — CVS</title>
-  <link rel="stylesheet" href="/assets/css/main.css" />
-  <link rel="stylesheet" href="/assets/css/components.css" />
-  <link rel="stylesheet" href="/assets/css/layout.css" />
-  <script>window.__ENV__ = window.__ENV__ || {};</script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dashboard Diagnostic — CVS</title>
+
+  <link rel="stylesheet" href="/assets/css/main.css">
+  <link rel="stylesheet" href="/assets/css/components.css">
+  <link rel="stylesheet" href="/assets/css/layout.css">
+
+  <style>
+    #boot-status {
+      margin: 16px;
+      padding: 16px;
+      background: #fff;
+      color: #222;
+      border: 2px solid #64748b;
+      border-radius: 10px;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      font: 13px/1.6 monospace;
+    }
+    #app { min-height: 100vh; }
+  </style>
+
+  <script>
+    window.__ENV__ = window.__ENV__ || {};
+  </script>
+
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="/assets/js/config.js"></script>
   <script src="/assets/js/supabaseClient.js"></script>
@@ -16,97 +37,116 @@
   <script src="/assets/js/utils.js"></script>
   <script src="/assets/js/app-shell.js"></script>
 </head>
+
 <body>
+
+  <div id="boot-status">CVS: Memulai dashboard...</div>
   <div id="app"></div>
+
   <script>
-    CVSAppShell.mount({
-      title: 'Dashboard',
-      requiredRoles: ['admin','operator','viewer'],
-      onReady: async (profile) => {
-        const main = document.getElementById('main-content');
-        const today = CVSUtils.todayLocalInputDate();
-        const sb = window.cvsSupabase;
+    const statusBox = document.getElementById('boot-status');
 
-        main.innerHTML =
-          '<div class="grid-stats" id="stats">' +
-            '<div class="stat"><div class="label">Total Karyawan</div><div class="value" id="s-emp">…</div></div>' +
-            '<div class="stat"><div class="label">Hadir Hari Ini</div><div class="value" id="s-att">…</div></div>' +
-            '<div class="stat"><div class="label">Voucher Terbit Hari Ini</div><div class="value" id="s-vou">…</div></div>' +
-            '<div class="stat"><div class="label">Sudah Redeemed</div><div class="value" id="s-red">…</div></div>' +
-          '</div>' +
-          '<div class="card mt-4">' +
-            '<div class="card-header"><h3 class="card-title">Aktivitas Terbaru</h3></div>' +
-            '<div class="table-wrap">' +
-              '<table class="data-table"><thead><tr>' +
-                '<th>Waktu</th><th>Aksi</th><th>Entitas</th><th>Oleh</th>' +
-              '</tr></thead><tbody id="tb-activity">' +
-                '<tr><td colspan="4" class="empty-state">Memuat…</td></tr>' +
-              '</tbody></table>' +
-            '</div>' +
-          '</div>';
+    function status(message) {
+      statusBox.textContent += '\n' + message;
+    }
 
-        async function loadStats() {
-          try {
-            const [emp, att, vou, red] = await Promise.all([
-              sb.from('employees').select('*', { count: 'exact', head: true }),
-              sb.from('attendance').select('*', { count: 'exact', head: true })
-                .eq('attendance_date', today),
-              sb.from('vouchers').select('*', { count: 'exact', head: true })
-                .eq('voucher_date', today),
-              sb.from('vouchers').select('*', { count: 'exact', head: true })
-                .eq('voucher_date', today).eq('status', 'redeemed')
-            ]);
-
-            document.getElementById('s-emp').textContent = emp.count ?? 0;
-            document.getElementById('s-att').textContent = att.count ?? 0;
-            document.getElementById('s-vou').textContent = vou.count ?? 0;
-            document.getElementById('s-red').textContent = red.count ?? 0;
-          } catch (err) {
-            CVSUI.toast('Gagal memuat statistik: ' + err.message, 'error');
-          }
-        }
-
-        async function loadActivity() {
-          const tb = document.getElementById('tb-activity');
-          // Audit hanya bisa dibaca admin (RLS). Bila viewer/operator, tabel kosong.
-          const { data, error } = await sb
-            .from('audit_logs')
-            .select('id, created_at, action, entity_type, actor_id, metadata')
-            .order('created_at', { ascending: false })
-            .limit(15);
-          if (error) {
-            tb.innerHTML = '<tr><td colspan="4" class="empty-state">' +
-              CVSUI.escapeHtml(error.message) + '</td></tr>';
-            return;
-          }
-          if (!data || data.length === 0) {
-            tb.innerHTML = '<tr><td colspan="4" class="empty-state">Belum ada aktivitas.</td></tr>';
-            return;
-          }
-          const actorIds = [...new Set(data.map(d => d.actor_id).filter(Boolean))];
-          let actors = {};
-          if (actorIds.length) {
-            const { data: profs } = await sb
-              .from('profiles').select('id, full_name, email').in('id', actorIds);
-            (profs || []).forEach(p => { actors[p.id] = p; });
-          }
-          tb.innerHTML = data.map(row => {
-            const actor = row.actor_id && actors[row.actor_id]
-              ? (actors[row.actor_id].full_name || actors[row.actor_id].email)
-              : '—';
-            return '<tr>' +
-              '<td>' + CVSUI.formatDateTime(row.created_at) + '</td>' +
-              '<td>' + CVSUI.escapeHtml(row.action) + '</td>' +
-              '<td>' + CVSUI.escapeHtml(row.entity_type || '') + '</td>' +
-              '<td>' + CVSUI.escapeHtml(actor) + '</td>' +
-            '</tr>';
-          }).join('');
-        }
-
-        await loadStats();
-        await loadActivity();
-      }
+    window.addEventListener('error', function (event) {
+      status(
+        '\nJAVASCRIPT ERROR:\n' +
+        event.message +
+        '\nFile: ' + event.filename +
+        '\nLine: ' + event.lineno
+      );
     });
+
+    window.addEventListener('unhandledrejection', function (event) {
+      status(
+        '\nPROMISE ERROR:\n' +
+        (event.reason?.stack || event.reason?.message || String(event.reason))
+      );
+    });
+
+    async function startDashboard() {
+      try {
+        status('1. Memeriksa konfigurasi...');
+
+        if (!window.CVS_CONFIG) {
+          throw new Error('CVS_CONFIG tidak ditemukan');
+        }
+
+        status('2. Memeriksa Supabase client...');
+
+        if (!window.cvsSupabase) {
+          throw new Error('Supabase client tidak tersedia');
+        }
+
+        status('3. Memeriksa CVSAuth...');
+
+        if (!window.CVSAuth) {
+          throw new Error('CVSAuth tidak tersedia');
+        }
+
+        status('4. Memeriksa CVSUI...');
+
+        if (!window.CVSUI) {
+          throw new Error('CVSUI tidak tersedia');
+        }
+
+        status('5. Memeriksa CVSUtils...');
+
+        if (!window.CVSUtils) {
+          throw new Error('CVSUtils tidak tersedia');
+        }
+
+        status('6. Memeriksa CVSAppShell...');
+
+        if (!window.CVSAppShell) {
+          throw new Error('CVSAppShell tidak tersedia');
+        }
+
+        status('7. Menjalankan App Shell...');
+
+        await window.CVSAppShell.mount({
+          title: 'Dashboard',
+          requiredRoles: ['admin', 'operator', 'viewer'],
+
+          onReady: async function (profile) {
+            status(
+              '8. App Shell berhasil.\n' +
+              'Email: ' + profile.email +
+              '\nRole: ' + profile.role
+            );
+
+            const main = document.getElementById('main-content');
+
+            if (!main) {
+              throw new Error('main-content tidak ditemukan');
+            }
+
+            main.innerHTML =
+              '<div class="card">' +
+              '<h2>Dashboard CVS</h2>' +
+              '<p>Login berhasil.</p>' +
+              '<p>Pengguna: ' + CVSUI.escapeHtml(profile.email) + '</p>' +
+              '<p>Role: ' + CVSUI.escapeHtml(profile.role) + '</p>' +
+              '</div>';
+
+            status('9. Tampilan dashboard berhasil dibuat.');
+            statusBox.style.display = 'none';
+          }
+        });
+
+      } catch (error) {
+        status(
+          '\nDASHBOARD ERROR:\n' +
+          (error.stack || error.message || String(error))
+        );
+      }
+    }
+
+    startDashboard();
   </script>
+
 </body>
 </html>
+
