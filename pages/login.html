@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Login Debug — CVS</title>
+  <title>CVS Diagnostic</title>
 
   <link rel="stylesheet" href="/assets/css/main.css" />
   <link rel="stylesheet" href="/assets/css/components.css" />
@@ -26,9 +26,12 @@
     <div class="card auth-card">
 
       <h1>Cafeteria Voucher System</h1>
-      <p class="text-muted text-sm">Login — Auth Diagnostic</p>
+      <p class="text-muted text-sm">
+        Login & Database Diagnostic
+      </p>
 
       <form id="login-form">
+
         <div class="form-row">
           <label for="email">Email</label>
           <input
@@ -54,14 +57,25 @@
           class="btn btn-primary btn-block"
           id="btn-login"
         >
-          Tes Login
+          Mulai Diagnostic
         </button>
+
       </form>
 
-      <div id="debug-result"
-           style="margin-top:20px; padding:12px; border-radius:8px; background:#eee; color:#222; white-space:pre-wrap; overflow-wrap:anywhere;">
-        Menunggu pengujian...
-      </div>
+      <div
+        id="debug-result"
+        style="
+          margin-top:20px;
+          padding:14px;
+          border-radius:8px;
+          background:#eee;
+          color:#222;
+          white-space:pre-wrap;
+          overflow-wrap:anywhere;
+          font-size:13px;
+          line-height:1.6;
+        "
+      >Menunggu pengujian...</div>
 
       <p class="text-xs text-muted text-center mt-4">
         CVS v<span id="app-version"></span>
@@ -78,13 +92,33 @@
     document.getElementById('app-version').textContent =
       CVS_CONFIG.APP_VERSION;
 
-    function showResult(title, detail) {
-      output.textContent =
-        title + '\n\n' + detail;
+    const report = [];
+
+    function addResult(name, status, detail = '') {
+      const icon = status ? 'PASS' : 'FAIL';
+
+      report.push(
+        `[${icon}] ${name}` +
+        (detail ? '\n' + detail : '')
+      );
+
+      output.textContent = report.join('\n\n');
+    }
+
+    function errorMessage(error) {
+      return [
+        'Message: ' + (error?.message || String(error)),
+        'Code: ' + (error?.code || '-'),
+        'Status: ' + (error?.status || '-'),
+        'Details: ' + (error?.details || '-'),
+        'Hint: ' + (error?.hint || '-')
+      ].join('\n');
     }
 
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
+
+      report.length = 0;
 
       const email =
         document.getElementById('email').value.trim();
@@ -93,48 +127,157 @@
         document.getElementById('password').value;
 
       btn.disabled = true;
-      btn.textContent = 'Menghubungi Supabase...';
+      btn.textContent = 'Memeriksa...';
 
-      showResult('SEDANG TES AUTH', 'Mohon tunggu...');
+      output.textContent = 'Memulai diagnostic...';
+
+      let client = null;
 
       try {
-        if (!window.cvsSupabase) {
-          throw new Error('Supabase client tidak ditemukan.');
+        // 1. CONFIGURATION
+        addResult(
+          'CONFIGURATION',
+          !!window.CVS_CONFIG?.SUPABASE_URL &&
+          !!window.CVS_CONFIG?.SUPABASE_ANON_KEY,
+          'Project URL: ' +
+          (window.CVS_CONFIG?.SUPABASE_URL || 'TIDAK ADA')
+        );
+
+        // 2. SUPABASE CLIENT
+        client = window.cvsSupabase;
+
+        if (!client?.auth) {
+          throw new Error('Supabase client tidak tersedia.');
         }
 
+        addResult(
+          'SUPABASE CLIENT',
+          true,
+          'Client berhasil dimuat.'
+        );
+
+        // 3. AUTH LOGIN
+        btn.textContent = 'Login Auth...';
+
         const { data, error } =
-          await window.cvsSupabase.auth.signInWithPassword({
+          await client.auth.signInWithPassword({
             email,
             password
           });
 
-        if (error) throw error;
+        if (error) {
+          addResult(
+            'AUTH LOGIN',
+            false,
+            errorMessage(error)
+          );
+          return;
+        }
 
-        showResult(
-          'AUTH BERHASIL',
+        addResult(
+          'AUTH LOGIN',
+          true,
           'Email: ' + (data.user?.email || '-') +
-          '\nUser ID: ' + (data.user?.id || '-') +
-          '\n\nSupabase Auth berhasil.' +
-          '\nQuery profiles belum dijalankan.' +
-          '\nRole belum diperiksa.' +
-          '\nDashboard belum dibuka.'
+          '\nUser ID: ' + (data.user?.id || '-')
         );
 
-        console.log('[CVS DEBUG] Auth success', data.user);
+        // 4. PROFILE QUERY
+        btn.textContent = 'Memeriksa profil...';
+
+        const { data: profile, error: profileError } =
+          await client
+            .from('profiles')
+            .select('id, email, full_name, role, is_active')
+            .eq('id', data.user.id)
+            .single();
+
+        if (profileError) {
+          addResult(
+            'PROFILE QUERY',
+            false,
+            errorMessage(profileError)
+          );
+          return;
+        }
+
+        addResult(
+          'PROFILE QUERY',
+          true,
+          JSON.stringify(profile, null, 2)
+        );
+
+        // 5. ACTIVE STATUS
+        addResult(
+          'ACCOUNT ACTIVE',
+          profile.is_active === true,
+          'is_active: ' + profile.is_active
+        );
+
+        // 6. ROLE
+        const validRoles = [
+          'admin',
+          'operator',
+          'viewer'
+        ];
+
+        addResult(
+          'ROLE CHECK',
+          validRoles.includes(profile.role),
+          'role: ' + profile.role
+        );
+
+        // 7. RPC IS_ADMIN
+        btn.textContent = 'Memeriksa RPC...';
+
+        const { data: adminResult, error: adminError } =
+          await client.rpc('is_admin');
+
+        if (adminError) {
+          addResult(
+            'RPC IS_ADMIN',
+            false,
+            errorMessage(adminError)
+          );
+        } else {
+          addResult(
+            'RPC IS_ADMIN',
+            true,
+            'Hasil: ' + adminResult
+          );
+
+          addResult(
+            'ADMIN CONSISTENCY',
+            adminResult === (profile.role === 'admin'),
+            'Profile role: ' + profile.role +
+            '\nRPC result: ' + adminResult
+          );
+        }
+
+        // FINAL
+        const success =
+          profile.is_active === true &&
+          validRoles.includes(profile.role);
+
+        addResult(
+          'FINAL RESULT',
+          success,
+          success
+            ? 'Auth dan profil berhasil diperiksa.'
+            : 'Ada pemeriksaan yang belum lolos.'
+        );
 
       } catch (error) {
-        showResult(
-          'AUTH GAGAL',
-          'Pesan: ' + (error.message || String(error)) +
-          '\nKode: ' + (error.code || '-') +
-          '\nStatus: ' + (error.status || '-')
+        addResult(
+          'DIAGNOSTIC ERROR',
+          false,
+          errorMessage(error)
         );
 
-        console.error('[CVS DEBUG] Auth error', error);
+        console.error('[CVS DEBUG]', error);
 
       } finally {
         btn.disabled = false;
-        btn.textContent = 'Tes Login';
+        btn.textContent = 'Mulai Diagnostic';
       }
     });
   </script>
