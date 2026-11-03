@@ -112,5 +112,18 @@
 
   ensureContainers();
 
-  window.CVSUI = { toast, showLoading, escapeHtml, modal, confirmDialog, formatDateTime };
+    window.CVSUI = {
+    toast,
+    showLoading,
+    escapeHtml,
+    modal,
+    confirmDialog,
+    formatDateTime
+  };
+
+  if (document.body) {
+    ensureContainers();
+  } else {
+    document.addEventListener('DOMContentLoaded', ensureContainers, { once: true });
+  }
 })();
