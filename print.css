@@ -1,0 +1,81 @@
+/* ============================================================
+   File: assets/css/print.css
+   Thermal print styles untuk voucher 58mm / 80mm.
+   ============================================================ */
+
+/* Layout di layar */
+.print-wrap {
+  max-width: 420px;
+  margin: 2rem auto;
+  padding: 1rem;
+}
+.print-actions {
+  display: flex; gap: .5rem; justify-content: center;
+  margin-bottom: 1rem; flex-wrap: wrap;
+}
+.print-area {
+  background: #fff;
+  border: 1px dashed #94a3b8;
+  padding: 16px;
+  font-family: var(--font-mono);
+  color: #000;
+  border-radius: 6px;
+}
+.print-area .v-brand {
+  font-size: .9rem;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+.print-area .v-no {
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  margin: .25rem 0;
+}
+.print-area .divider {
+  border-top: 1px dashed #000;
+  margin: .5rem 0;
+}
+.print-area .row {
+  display: flex;
+  justify-content: space-between;
+  font-size: .85rem;
+  gap: 1rem;
+  padding: .1rem 0;
+}
+.print-area .row .k { color: #444; }
+.print-area .row .v { font-weight: 600; text-align: right; word-break: break-word; }
+.print-area .footer {
+  margin-top: .5rem;
+  font-size: .7rem;
+  text-align: center;
+  color: #555;
+}
+
+/* Preview 80mm / 58mm di layar */
+.print-area.size-80mm { max-width: 76mm; margin: 0 auto; }
+.print-area.size-58mm { max-width: 54mm; margin: 0 auto; font-size: .8rem; }
+
+/* === Print === */
+@media print {
+  body * { visibility: hidden; }
+  .print-area, .print-area * { visibility: visible; }
+
+  .print-area {
+    position: absolute;
+    left: 0; top: 0;
+    width: 100%;
+    border: 0;
+    border-radius: 0;
+    padding: 2mm;
+  }
+
+  .no-print { display: none !important; }
+
+  @page { margin: 2mm; }
+  @page :first { size: auto; }
+}
+
+/* Mode @page spesifik berdasarkan class body */
+body.print-58mm  @page { size: 58mm auto; }
+body.print-80mm  @page { size: 80mm auto; }

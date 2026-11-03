@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cetak Voucher — CVS</title>
+  <link rel="stylesheet" href="/assets/css/main.css" />
+  <link rel="stylesheet" href="/assets/css/components.css" />
+  <link rel="stylesheet" href="/assets/css/layout.css" />
+  <link rel="stylesheet" href="/assets/css/print.css" />
+  <script>window.__ENV__ = window.__ENV__ || {};</script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="/assets/js/config.js"></script>
+  <script src="/assets/js/supabaseClient.js"></script>
+  <script src="/assets/js/auth.js"></script>
+  <script src="/assets/js/ui.js"></script>
+</head>
+<body>
+  <div class="print-wrap">
+    <div class="print-actions no-print">
+      <button class="btn" id="btn-58">Ukuran 58mm</button>
+      <button class="btn" id="btn-80">Ukuran 80mm</button>
+      <button class="btn btn-primary" id="btn-print">Cetak</button>
+      <a class="btn btn-ghost" href="/dashboard">Kembali</a>
+    </div>
+    <div class="print-area size-80mm" id="print-area">
+      <p class="text-muted">Memuat…</p>
+    </div>
+  </div>
+
+  <script>
+    (async () => {
+      CVSUI.showLoading(true);
+      const profile = await CVSAuth.requireAuth({ roles: ['admin','operator','viewer'] });
+      CVSUI.showLoading(false);
+      if (!profile) return;
+
+      const params = new URLSearchParams(window.location.search);
+      const id = params.get('id');
+      const area = document.getElementById('print-area');
+      if (!id) {
+        area.innerHTML = '<p class="text-center" style="color:#dc2626">ID voucher tidak ditemukan di URL.</p>';
+        return;
+      }
+
+      const sb = window.cvsSupabase;
+      const { data, error } = await sb
+        .from('vouchers')
+        .select('id, voucher_no, employee_id, meal_schedule_id, voucher_date, status, issued_at')
+        .eq('id', id).single();
+
+      if (error || !data) {
+        area.innerHTML = '<p class="text-center" style="color:#dc2626">Voucher tidak ditemukan.</p>';
+        return;
+      }
+
+      const { data: scheds } = await sb
+        .from('meal_schedules').select('id, name').eq('id', data.meal_schedule_id);
+      const mealName = scheds && scheds[0] ? scheds[0].name : '-';
+
+      const { data: emps } = await sb
+        .from('employees').select('full_name, department').eq('employee_id', data.employee_id);
+      const emp = emps && emps[0] ? emps[0] : { full_name: '-', department: '-' };
+
+      area.innerHTML =
+        '<div class="v-brand">CAFETERIA VOUCHER</div>' +
+        '<div class="v-no">' + CVSUI.escapeHtml(data.voucher_no) + '</div>' +
+        '<div class="divider"></div>' +
+        '<div class="row"><span class="k">Nama</span><span class="v">' + CVSUI.escapeHtml(emp.full_name) + '</span></div>' +
+        '<div class="row"><span class="k">Employee ID</span><span class="v">' + CVSUI.escapeHtml(data.employee_id) + '</span></div>' +
+        '<div class="row"><span class="k">Departemen</span><span class="v">' + CVSUI.escapeHtml(emp.department || '-') + '</span></div>' +
+        '<div class="divider"></div>' +
+        '<div class="row"><span class="k">Slot</span><span class="v">' + CVSUI.escapeHtml(mealName) + '</span></div>' +
+        '<div class="row"><span class="k">Tanggal</span><span class="v">' + CVSUI.escapeHtml(data.voucher_date) + '</span></div>' +
+        '<div class="row"><span class="k">Status</span><span class="v">' + CVSUI.escapeHtml(data.status) + '</span></div>' +
+        '<div class="divider"></div>' +
+        '<div class="footer">Cetak: ' + CVSUI.formatDateTime(data.issued_at) + '</div>' +
+        '<div class="footer">Tunjukkan voucher ini ke petugas kantin.</div>';
+
+      document.getElementById('btn-print').addEventListener('click', () => window.print());
+      document.getElementById('btn-58').addEventListener('click', () => {
+        area.classList.remove('size-80mm');
+        area.classList.add('size-58mm');
+      });
+      document.getElementById('btn-80').addEventListener('click', () => {
+        area.classList.remove('size-58mm');
+        area.classList.add('size-80mm');
+      });
+    })();
+  </script>
+</body>
+</html>

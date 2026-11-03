@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Voucher — CVS</title>
+  <link rel="stylesheet" href="/assets/css/main.css" />
+  <link rel="stylesheet" href="/assets/css/components.css" />
+  <link rel="stylesheet" href="/assets/css/layout.css" />
+  <script>window.__ENV__ = window.__ENV__ || {};</script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="/assets/js/config.js"></script>
+  <script src="/assets/js/supabaseClient.js"></script>
+  <script src="/assets/js/auth.js"></script>
+  <script src="/assets/js/ui.js"></script>
+  <script src="/assets/js/utils.js"></script>
+  <script src="/assets/js/app-shell.js"></script>
+</head>
+<body>
+  <div id="app"></div>
+  <script>
+    CVSAppShell.mount({
+      title: 'Daftar Voucher',
+      requiredRoles: ['admin','operator','viewer'],
+      onReady: async (profile) => {
+        const isOperator = profile.role === 'admin' || profile.role === 'operator';
+        const sb = window.cvsSupabase;
+        const main = document.getElementById('main-content');
+        const today = CVSUtils.todayLocalInputDate();
+
+        main.innerHTML =
+          '<div class="card">' +
+            '<div class="card-header"><h3 class="card-title">Voucher</h3></div>' +
+            '<div class="filter-row">' +
+              '<input type="date" id="filter-date" value="' + today + '" />' +
+              '<input type="text" id="filter-emp" placeholder="Employee ID / nama" style="min-width:180px" />' +
+              '<select id="filter-status">' +
+                '<option value="">Semua status</option>' +
+                '<option value="issued">Issued</option>' +
+                '<option value="redeemed">Redeemed</option>' +
+                '<option value="cancelled">Cancelled</option>' +
+              '</select>' +
+            '</div>' +
+            '<div class="table-wrap">' +
+              '<table class="data-table"><thead><tr>' +
+                '<th>Voucher No</th><th>Employee ID</th><th>Slot</th><th>Tanggal</th>' +
+                '<th>Status</th><th>Issued At</th><th id="th-act"></th>' +
+              '</tr></thead><tbody id="tb"></tbody></table>' +
+            '</div>' +
+          '</div>';
+
+        if (isOperator) document.getElementById('th-act').textContent = 'Aksi';
+
+        let rows = [];
+        let schedMap = {};
+
+        async function load() {
+          const tb = document.getElementById('tb');
+          tb.innerHTML = '<tr><td colspan="7" class="empty-state">Memuat…</td></tr>';
+
+          const { data: scheds } = await sb.from('meal_schedules').select('id, name');
+          schedMap = {}; (scheds || []).forEach(s => { schedMap[s.id] = s.name; });
+
+          const date = document.getElementById('filter-date').value;
+          const qEmp = document.getElementById('filter-emp').value.trim();
+          const status = document.getElementById('filter-status').value;
+          let q = sb.from('vouchers').select('*').order('issued_at', { ascending: false }).limit(200);
+          if (date) q = q.eq('voucher_date', date);
+          if (qEmp) q = q.ilike('employee_id', '%' + qEmp + '%');
+          if (status) q = q.eq('status', status);
+
+          const { data, error } = await q;
+          if (error) {
+            tb.innerHTML = '<tr><td colspan="7" class="empty-state">' + CVSUI.escapeHtml(error.message) + '</td></tr>';
+            return;
+          }
+          rows = data || [];
+          render(rows);
+        }
+
+        function badge(s) {
+          const map = { issued:'info', redeemed:'success', cancelled:'danger' };
+          return '<span class="badge badge-' + (map[s] || 'muted') + '">' + CVSUI.escapeHtml(s) + '</span>';
+        }
+
+        function render(list) {
+          const tb = document.getElementById('tb');
+          if (!list.length) {
+            tb.innerHTML = '<tr><td colspan="7" class="empty-state">Tidak ada voucher.</td></tr>';
+            return;
+          }
+          tb.innerHTML = list.map(v =>
+            '<tr>' +
+              '<td><code>' + CVSUI.escapeHtml(v.voucher_no) + '</code></td>' +
+              '<td>' + CVSUI.escapeHtml(v.employee_id) + '</td>' +
+              '<td>' + CVSUI.escapeHtml(schedMap[v.meal_schedule_id] || '-') + '</td>' +
+              '<td>' + CVSUI.escapeHtml(v.voucher_date) + '</td>' +
+              '<td>' + badge(v.status) + '</td>' +
+              '<td>' + CVSUI.formatDateTime(v.issued_at) + '</td>' +
+              '<td>' + (isOperator && v.status === 'issued' ?
+                '<button class="btn btn-sm btn-success" data-redeem="' + v.id + '">Redeem</button> ' +
+                '<button class="btn btn-sm btn-danger" data-cancel="' + v.id + '">Cancel</button>' :
+                '<a class="btn btn-sm" href="/print-voucher?id=' + encodeURIComponent(v.id) + '" target="_blank">Cetak</a>') +
+              '</td>' +
+            '</tr>'
+          ).join('');
+        }
+
+        async function redeem(id) {
+          if (!(await CVSUI.confirmDialog('Tandai voucher ini sebagai redeemed?', { okText: 'Redeem' }))) return;
+          const { data, error } = await sb.rpc('redeem_voucher', { p_voucher_id: id });
+          if (error) { CVSUI.toast('Gagal: ' + error.message, 'error'); return; }
+          if (!data.ok) { CVSUI.toast('Gagal: ' + data.code, 'error'); return; }
+          CVSUI.toast('Voucher redeemed', 'success');
+          await load();
+        }
+
+        async function cancel(id) {
+          const ok = await CVSUI.modal({
+            title: 'Batalkan Voucher',
+            bodyHtml: '<div class="form-row"><label>Alasan</label>' +
+              '<input type="text" id="c-reason" placeholder="min 3 karakter" /></div>',
+            okText: 'Batalkan',
+            onOk: () => {
+              const r = document.getElementById('c-reason').value.trim();
+              if (r.length < 3) { CVSUI.toast('Alasan minimal 3 karakter', 'error'); return false; }
+              return true;
+            }
+          });
+          if (!ok) return;
+          // Modal sudah ditutup, ambil nilai terakhir tidak tersedia.
+          // Solusi: pakai prompt fallback bila pola modal tidak menyimpan state.
+          const reason = window.prompt('Alasan pembatalan (min 3 karakter):', '');
+          if (!reason || reason.trim().length < 3) { CVSUI.toast('Alasan minimal 3 karakter', 'error'); return; }
+          const { data, error } = await sb.rpc('cancel_voucher', {
+            p_voucher_id: id, p_reason: reason.trim()
+          });
+          if (error) { CVSUI.toast('Gagal: ' + error.message, 'error'); return; }
+          if (!data.ok) { CVSUI.toast('Gagal: ' + data.code, 'error'); return; }
+          CVSUI.toast('Voucher dibatalkan', 'success');
+          await load();
+        }
+
+        document.getElementById('filter-date').addEventListener('change', load);
+        document.getElementById('filter-emp').addEventListener('input', load);
+        document.getElementById('filter-status').addEventListener('change', load);
+        document.getElementById('tb').addEventListener('click', (e) => {
+          const r = e.target.getAttribute('data-redeem');
+          const c = e.target.getAttribute('data-cancel');
+          if (r) redeem(r);
+          if (c) cancel(c);
+        });
+
+        await load();
+      }
+    });
+  </script>
+</body>
+</html>

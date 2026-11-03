@@ -1,0 +1,33 @@
+{
+  "version": 2,
+  "cleanUrls": true,
+  "trailingSlash": false,
+  "rewrites": [
+    { "source": "/", "destination": "/index.html" },
+    { "source": "/login", "destination": "/pages/login.html" },
+    { "source": "/dashboard", "destination": "/pages/dashboard.html" },
+    { "source": "/employees", "destination": "/pages/employees.html" },
+    { "source": "/attendance", "destination": "/pages/attendance.html" },
+    { "source": "/eligibility", "destination": "/pages/eligibility.html" },
+    { "source": "/vouchers", "destination": "/pages/vouchers.html" },
+    { "source": "/scan", "destination": "/pages/scan.html" },
+    { "source": "/print-voucher", "destination": "/pages/print-voucher.html" }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "X-Frame-Options", "value": "DENY" },
+        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
+        { "key": "Permissions-Policy", "value": "camera=(), microphone=(), geolocation=()" }
+      ]
+    },
+    {
+      "source": "/assets/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=3600" }
+      ]
+    }
+  ]
+}

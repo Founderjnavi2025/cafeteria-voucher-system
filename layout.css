@@ -1,0 +1,216 @@
+/* ============================================================
+   File: assets/css/layout.css
+   Sidebar, topbar, layout protected, responsive.
+   ============================================================ */
+
+/* ---------- App Shell ---------- */
+.app-shell {
+  display: grid;
+  grid-template-columns: var(--sidebar-w) 1fr;
+  min-height: 100vh;
+}
+
+/* ---------- Sidebar ---------- */
+.sidebar {
+  background: var(--c-sidebar);
+  color: var(--c-sidebar-text);
+  display: flex;
+  flex-direction: column;
+  padding: 1rem 0;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+}
+.sidebar .brand {
+  padding: .5rem 1.25rem 1.25rem;
+  color: #fff;
+  font-weight: 700;
+  font-size: 1.05rem;
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+}
+.sidebar .brand-mark {
+  width: 28px; height: 28px;
+  border-radius: 8px;
+  background: var(--c-primary);
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 1rem;
+}
+.sidebar nav {
+  display: flex; flex-direction: column;
+  gap: .15rem;
+  padding: 0 .5rem;
+  flex: 1;
+  overflow-y: auto;
+}
+.sidebar nav a {
+  color: var(--c-sidebar-text);
+  padding: .6rem .8rem;
+  border-radius: 8px;
+  font-size: .9rem;
+  display: flex;
+  align-items: center;
+  gap: .55rem;
+  transition: background .15s ease;
+}
+.sidebar nav a:hover { background: var(--c-sidebar-hover); color: #fff; text-decoration: none; }
+.sidebar nav a.active { background: var(--c-primary); color: #fff; }
+.sidebar .nav-icon { width: 1.1rem; text-align: center; }
+
+.sidebar .user-box {
+  padding: .8rem 1.25rem;
+  border-top: 1px solid rgba(255,255,255,.08);
+  font-size: .8rem;
+  color: #94a3b8;
+}
+.sidebar .user-box b {
+  display: block;
+  color: #e2e8f0;
+  font-size: .85rem;
+  margin-bottom: .1rem;
+}
+.sidebar .user-box .logout-btn {
+  margin-top: .5rem;
+  background: transparent;
+  border: 1px solid rgba(255,255,255,.15);
+  color: #e2e8f0;
+  padding: .3rem .6rem;
+  border-radius: 6px;
+  font-size: .75rem;
+  cursor: pointer;
+}
+.sidebar .user-box .logout-btn:hover { background: rgba(255,255,255,.1); }
+
+/* ---------- Topbar ---------- */
+.topbar {
+  background: var(--c-surface);
+  border-bottom: 1px solid var(--c-border);
+  padding: .85rem 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  min-height: var(--topbar-h);
+}
+.topbar h1 { font-size: 1.1rem; margin: 0; }
+.topbar .actions { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; }
+
+.menu-toggle {
+  display: none;
+  background: none; border: 0;
+  font-size: 1.25rem; padding: .4rem;
+  cursor: pointer;
+}
+
+/* ---------- Main ---------- */
+.main {
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  min-width: 0;
+}
+
+/* ---------- Responsive ---------- */
+@media (max-width: 960px) {
+  .app-shell { grid-template-columns: 1fr; }
+  .sidebar {
+    position: fixed;
+    left: 0; top: 0; bottom: 0;
+    width: var(--sidebar-w);
+    transform: translateX(-100%);
+    transition: transform .2s ease;
+    z-index: 100;
+  }
+  .sidebar.open { transform: translateX(0); box-shadow: var(--shadow-lg); }
+  .main { padding: 1rem; }
+  .grid-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .menu-toggle { display: inline-flex; }
+  .sidebar-backdrop {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(15,23,42,.5);
+    z-index: 99;
+  }
+  .sidebar-backdrop.show { display: block; }
+}
+
+@media (max-width: 640px) {
+  .form-grid { grid-template-columns: 1fr; }
+  .topbar { padding: .7rem 1rem; }
+  .topbar h1 { font-size: 1rem; }
+  .grid-stats { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 520px) {
+  .data-table th, .data-table td { font-size: .82rem; padding: .5rem .6rem; }
+}
+
+/* ---------- Auth layout ---------- */
+.auth-layout {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: var(--c-bg);
+}
+.auth-card {
+  width: 100%;
+  max-width: 380px;
+}
+
+/* ---------- Kiosk layout (scan) ---------- */
+.kiosk-layout {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--c-bg);
+}
+.kiosk-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 1rem 1.5rem;
+  background: var(--c-surface);
+  border-bottom: 1px solid var(--c-border);
+}
+.kiosk-body {
+  flex: 1;
+  display: flex; align-items: center; justify-content: center;
+  padding: 2rem 1rem;
+}
+.kiosk-card {
+  width: 100%;
+  max-width: 520px;
+  background: var(--c-surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  padding: 2rem;
+  text-align: center;
+}
+.kiosk-card input.big-input {
+  width: 100%;
+  padding: 1.2rem 1rem;
+  font-size: 1.6rem;
+  text-align: center;
+  border: 2px solid var(--c-border);
+  border-radius: var(--radius);
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  font-family: var(--font-mono);
+}
+.kiosk-card input.big-input:focus {
+  border-color: var(--c-primary);
+  box-shadow: 0 0 0 4px var(--c-primary-soft);
+  outline: none;
+}
+.kiosk-status {
+  margin-top: 1rem;
+  min-height: 2.5rem;
+  font-size: 1rem;
+}
+.kiosk-status.success { color: var(--c-success-text); }
+.kiosk-status.error   { color: var(--c-danger-text); }

@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Scan Voucher — CVS</title>
+  <link rel="stylesheet" href="/assets/css/main.css" />
+  <link rel="stylesheet" href="/assets/css/components.css" />
+  <link rel="stylesheet" href="/assets/css/layout.css" />
+  <script>window.__ENV__ = window.__ENV__ || {};</script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="/assets/js/config.js"></script>
+  <script src="/assets/js/supabaseClient.js"></script>
+  <script src="/assets/js/auth.js"></script>
+  <script src="/assets/js/ui.js"></script>
+  <script src="/assets/js/utils.js"></script>
+</head>
+<body>
+  <div id="app" style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:1rem">
+    <p class="text-muted">Memuat…</p>
+  </div>
+
+  <script>
+    (async () => {
+      CVSUI.showLoading(true);
+      const profile = await CVSAuth.requireAuth({ roles: ['admin','operator'] });
+      CVSUI.showLoading(false);
+      if (!profile) return;
+
+      const sb = window.cvsSupabase;
+      const root = document.getElementById('app');
+      const deviceId = CVS_CONFIG.getDeviceId();
+      const today = CVSUtils.todayLocalInputDate();
+
+      root.innerHTML =
+        '<div class="kiosk-layout" style="min-height:100vh;width:100%">' +
+          '<div class="kiosk-header">' +
+            '<b>CVS Kiosk</b>' +
+            '<div class="flex gap-2 items-center">' +
+              '<span class="text-sm text-muted">' + CVSUI.escapeHtml(profile.full_name || profile.email) + '</span>' +
+              '<a href="/dashboard" class="btn btn-sm">Dashboard</a>' +
+              '<button class="btn btn-sm btn-ghost" id="btn-logout">Keluar</button>' +
+            '</div>' +
+          '</div>' +
+          '<div class="kiosk-body">' +
+            '<div class="kiosk-card">' +
+              '<h2 style="margin-bottom:.25rem">Terbitkan Voucher</h2>' +
+              '<p class="text-muted text-sm mb-4">Masukkan Employee ID atau scan kartu.</p>' +
+              '<div class="form-row"><label>Slot Makan</label>' +
+                '<select id="slot-select"></select></div>' +
+              '<input class="big-input" id="emp-input" type="text" placeholder="EMPLOYEE ID" autocomplete="off" autofocus />' +
+              '<button class="btn btn-primary btn-lg btn-block mt-3" id="btn-submit">Terbitkan</button>' +
+              '<div class="kiosk-status" id="kiosk-status"></div>' +
+              '<div class="text-xs text-muted mt-3">Device: ' + CVSUI.escapeHtml(deviceId) + ' &middot; Tanggal: ' + today + '</div>' +
+            '</div>' +
+          '</div>' +
+        '</div>';
+
+      document.getElementById('btn-logout').addEventListener('click', () => CVSAuth.logout());
+
+      // Load meal schedules
+      let scheduleId = null;
+      async function loadSchedules() {
+        const { data, error } = await sb
+          .from('meal_schedules').select('id, code, name, start_time, end_time')
+          .eq('is_active', true).order('start_time');
+        const sel = document.getElementById('slot-select');
+        if (error || !data || !data.length) {
+          sel.innerHTML = '<option value="">— tidak ada slot aktif —</option>';
+          return;
+        }
+        sel.innerHTML = data.map(s =>
+          '<option value="' + s.id + '">' + s.name + ' (' + s.start_time.slice(0,5) + '–' + s.end_time.slice(0,5) + ')</option>'
+        ).join('');
+        scheduleId = data[0].id;
+        sel.addEventListener('change', () => { scheduleId = sel.value; });
+      }
+
+      function setStatus(html, cls) {
+        const el = document.getElementById('kiosk-status');
+        el.className = 'kiosk-status ' + (cls || '');
+        el.innerHTML = html;
+      }
+
+      async function submit() {
+        const empInput = document.getElementById('emp-input');
+        const btn = document.getElementById('btn-submit');
+        const employeeId = empInput.value.trim().toUpperCase();
+        if (!employeeId) { setStatus('Masukkan Employee ID', 'error'); return; }
+        if (!scheduleId) { setStatus('Pilih slot makan', 'error'); return; }
+
+        btn.disabled = true;
+        setStatus('Memproses…');
+        try {
+          const { data, error } = await sb.rpc('issue_voucher', {
+            p_employee_id: employeeId,
+            p_meal_schedule_id: scheduleId,
+            p_voucher_date: today,
+            p_device_id: deviceId
+          });
+          if (error) {
+            setStatus('Error: ' + CVSUI.escapeHtml(error.message), 'error');
+            return;
+          }
+          if (!data || !data.ok) {
+            const code = data ? data.code : 'UNKNOWN';
+            const map = {
+              UNAUTHORIZED: 'Sesi tidak sah. Login ulang.',
+              SCHEDULE_NOT_FOUND: 'Slot tidak ditemukan.',
+              OVERNIGHT_SLOT_UNSUPPORTED: 'Slot lintas tengah malam tidak didukung.',
+              INVALID_DATE: 'Tanggal voucher tidak valid (bukan hari ini).',
+              OUTSIDE_WINDOW: 'Di luar jendela waktu slot.',
+              EMPLOYEE_NOT_FOUND: 'Employee ID tidak ditemukan.',
+              EMPLOYEE_INACTIVE: 'Karyawan tidak aktif.',
+              ATTENDANCE_NOT_FOUND: 'Belum ada data kehadiran hari ini.',
+              NOT_ELIGIBLE: 'Tidak memenuhi aturan kelayakan.',
+              DUPLICATE: 'Voucher sudah pernah diterbitkan: ' + (data && data.existing_voucher_no ? data.existing_voucher_no : '')
+            };
+            setStatus(map[code] || ('Gagal: ' + code), 'error');
+            return;
+          }
+          const v = data.voucher;
+          setStatus(
+            '<div><b>' + CVSUI.escapeHtml(v.full_name) + '</b> (' + CVSUI.escapeHtml(v.employee_id) + ')</div>' +
+            '<div class="mt-2">Voucher <code>' + CVSUI.escapeHtml(v.voucher_no) + '</code></div>' +
+            '<div class="mt-3 flex gap-2" style="justify-content:center">' +
+              '<a class="btn btn-success" href="/print-voucher?id=' + encodeURIComponent(v.id) + '" target="_blank">Cetak</a>' +
+              '<button class="btn" id="btn-reset">Karyawan Berikutnya</button>' +
+            '</div>',
+            'success'
+          );
+          document.getElementById('btn-reset').addEventListener('click', () => {
+            empInput.value = '';
+            empInput.focus();
+            setStatus('');
+          });
+        } finally {
+          btn.disabled = false;
+        }
+      }
+
+      document.getElementById('btn-submit').addEventListener('click', submit);
+      document.getElementById('emp-input').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') submit();
+      });
+
+      await loadSchedules();
+      document.getElementById('emp-input').focus();
+    })();
+  </script>
+</body>
+</html>

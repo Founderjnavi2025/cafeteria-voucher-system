@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Kehadiran — CVS</title>
+  <link rel="stylesheet" href="/assets/css/main.css" />
+  <link rel="stylesheet" href="/assets/css/components.css" />
+  <link rel="stylesheet" href="/assets/css/layout.css" />
+  <script>window.__ENV__ = window.__ENV__ || {};</script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="/assets/js/config.js"></script>
+  <script src="/assets/js/supabaseClient.js"></script>
+  <script src="/assets/js/auth.js"></script>
+  <script src="/assets/js/ui.js"></script>
+  <script src="/assets/js/utils.js"></script>
+  <script src="/assets/js/app-shell.js"></script>
+</head>
+<body>
+  <div id="app"></div>
+  <script>
+    CVSAppShell.mount({
+      title: 'Kehadiran',
+      requiredRoles: ['admin','operator','viewer'],
+      onReady: async (profile) => {
+        const isAdmin = profile.role === 'admin';
+        const isStaff = profile.role === 'admin' || profile.role === 'operator';
+        const sb = window.cvsSupabase;
+        const main = document.getElementById('main-content');
+        const today = CVSUtils.todayLocalInputDate();
+
+        main.innerHTML =
+          '<div class="card">' +
+            '<div class="card-header">' +
+              '<h3 class="card-title">Daftar Kehadiran</h3>' +
+              (isStaff ? '<div class="flex gap-2">' +
+                '<button class="btn btn-sm btn-primary" id="btn-add">Tambah</button>' +
+                '<button class="btn btn-sm" id="btn-import">Import CSV</button>' +
+              '</div>' : '') +
+            '</div>' +
+            '<div class="filter-row">' +
+              '<input type="date" id="filter-date" value="' + today + '" />' +
+              '<input type="text" id="filter-emp" placeholder="Filter employee_id" style="min-width:180px" />' +
+              '<select id="filter-status">' +
+                '<option value="">Semua status</option>' +
+                '<option value="present">Present</option>' +
+                '<option value="late">Late</option>' +
+                '<option value="absent">Absent</option>' +
+                '<option value="leave">Leave</option>' +
+                '<option value="sick">Sick</option>' +
+                '<option value="holiday">Holiday</option>' +
+              '</select>' +
+            '</div>' +
+            '<div class="table-wrap">' +
+              '<table class="data-table"><thead><tr>' +
+                '<th>Employee ID</th><th>Tanggal</th><th>Check In</th><th>Status</th>' +
+                '<th>Catatan</th><th id="th-actions"></th>' +
+              '</tr></thead><tbody id="tb"></tbody></table>' +
+            '</div>' +
+          '</div>';
+
+        if (isAdmin) document.getElementById('th-actions').textContent = 'Aksi';
+
+        let rows = [];
+
+        async function load() {
+          const tb = document.getElementById('tb');
+          tb.innerHTML = '<tr><td colspan="6" class="empty-state">Memuat…</td></tr>';
+          const date = document.getElementById('filter-date').value || today;
+          const qEmp = document.getElementById('filter-emp').value.trim();
+          const status = document.getElementById('filter-status').value;
+          let q = sb.from('attendance').select('*').eq('attendance_date', date)
+            .order('employee_id', { ascending: true });
+          if (qEmp) q = q.ilike('employee_id', '%' + qEmp + '%');
+          if (status) q = q.eq('attendance_status', status);
+          const { data, error } = await q;
+          if (error) {
+            tb.innerHTML = '<tr><td colspan="6" class="empty-state">' + CVSUI.escapeHtml(error.message) + '</td></tr>';
+            return;
+          }
+          rows = data || [];
+          render(rows);
+        }
+
+        function statusBadge(s) {
+          const map = { present:'success', late:'warning', absent:'danger', leave:'info', sick:'info', holiday:'muted' };
+          return '<span class="badge badge-' + (map[s] || 'muted') + '">' + CVSUI.escapeHtml(s) + '</span>';
+        }
+
+        function render(list) {
+          const tb = document.getElementById('tb');
+          if (!list.length) {
+            tb.innerHTML = '<tr><td colspan="6" class="empty-state">Tidak ada data untuk filter ini.</td></tr>';
+            return;
+          }
+          tb.innerHTML = list.map(r =>
+            '<tr>' +
+              '<td><code>' + CVSUI.escapeHtml(r.employee_id) + '</code></td>' +
+              '<td>' + CVSUI.escapeHtml(r.attendance_date) + '</td>' +
+              '<td>' + CVSUI.escapeHtml(r.check_in || '-') + '</td>' +
+              '<td>' + statusBadge(r.attendance_status) + '</td>' +
+              '<td>' + CVSUI.escapeHtml(r.notes || '') + '</td>' +
+              '<td>' + (isAdmin ?
+                '<button class="btn btn-sm btn-danger" data-del="' + r.id + '">Hapus</button>' : '—') +
+              '</td>' +
+            '</tr>'
+          ).join('');
+        }
+
+        async function openAdd() {
+          await CVSUI.modal({
+            title: 'Tambah Kehadiran',
+            bodyHtml:
+              '<div class="form-grid">' +
+                '<div class="form-row full"><label>Employee ID</label>' +
+                  '<input type="text" id="f-emp" required /></div>' +
+                '<div class="form-row"><label>Tanggal</label>' +
+                  '<input type="date" id="f-date" value="' + today + '" required /></div>' +
+                '<div class="form-row"><label>Check In</label>' +
+                  '<input type="time" id="f-in" /></div>' +
+                '<div class="form-row"><label>Status</label>' +
+                  '<select id="f-status">' +
+                    ['present','late','absent','leave','sick','holiday'].map(s =>
+                      '<option value="' + s + '">' + s + '</option>').join('') +
+                  '</select></div>' +
+                '<div class="form-row full"><label>Catatan</label>' +
+                  '<input type="text" id="f-notes" /></div>' +
+              '</div>',
+            okText: 'Simpan',
+            onOk: async () => {
+              const emp = document.getElementById('f-emp').value.trim();
+              const date = document.getElementById('f-date').value;
+              const check_in = document.getElementById('f-in').value || null;
+              const status = document.getElementById('f-status').value;
+              const notes = document.getElementById('f-notes').value.trim() || null;
+              if (!emp || !date) { CVSUI.toast('Employee ID dan tanggal wajib', 'error'); return false; }
+              const { error } = await sb.from('attendance').insert({
+                employee_id: emp, attendance_date: date,
+                check_in, attendance_status: status, notes
+              });
+              if (error) { CVSUI.toast('Gagal: ' + error.message, 'error'); return false; }
+              CVSUI.toast('Kehadiran ditambahkan', 'success');
+              await load();
+              return true;
+            }
+          });
+        }
+
+        async function openImport() {
+          await CVSUI.modal({
+            title: 'Import CSV Kehadiran',
+            bodyHtml:
+              '<p class="text-sm text-muted">Kolom: <code>employee_id,attendance_date,check_in,attendance_status,notes</code></p>' +
+              '<div class="form-row"><label>File CSV</label><input type="file" id="f-csv" accept=".csv,text/csv" /></div>' +
+              '<div id="import-summary" class="mt-2 text-sm"></div>',
+            okText: 'Proses',
+            onOk: async (backdrop) => {
+              const input = backdrop.querySelector('#f-csv');
+              const summary = backdrop.querySelector('#import-summary');
+              if (!input.files || !input.files[0]) {
+                summary.innerHTML = '<span style="color:var(--c-danger)">Pilih file CSV dulu.</span>';
+                return false;
+              }
+              try {
+                const text = await input.files[0].text();
+                const rowsCsv = CVSUtils.parseCSV(text);
+                if (!rowsCsv.length) { summary.textContent = 'File kosong'; return false; }
+                const need = ['employee_id','attendance_date','attendance_status'];
+                for (const k of need) {
+                  if (!(k in rowsCsv[0])) {
+                    summary.innerHTML = '<span style="color:var(--c-danger)">Kolom wajib tidak ada: ' + k + '</span>';
+                    return false;
+                  }
+                }
+                const payload = rowsCsv.map(r => ({
+                  employee_id: (r.employee_id || '').trim(),
+                  attendance_date: (r.attendance_date || '').trim(),
+                  check_in: (r.check_in || '').trim() || null,
+                  attendance_status: (r.attendance_status || 'present').trim(),
+                  notes: (r.notes || '').trim() || null
+                })).filter(r => r.employee_id && r.attendance_date);
+                if (!payload.length) {
+                  summary.textContent = 'Tidak ada baris valid';
+                  return false;
+                }
+
+                CVSUI.showLoading(true);
+                const { error } = await sb.from('attendance').insert(payload);
+                CVSUI.showLoading(false);
+                if (error) {
+                  summary.innerHTML = '<span style="color:var(--c-danger)">' + CVSUI.escapeHtml(error.message) + '</span>';
+                  return false;
+                }
+                CVSUI.toast('Import selesai: ' + payload.length + ' baris', 'success');
+                await load();
+                return true;
+              } catch (err) {
+                CVSUI.showLoading(false);
+                summary.innerHTML = '<span style="color:var(--c-danger)">' + CVSUI.escapeHtml(err.message) + '</span>';
+                return false;
+              }
+            }
+          });
+        }
+
+        async function del(id) {
+          if (!(await CVSUI.confirmDialog('Hapus data kehadiran ini?', { okText: 'Hapus' }))) return;
+          const { error } = await sb.from('attendance').delete().eq('id', id);
+          if (error) { CVSUI.toast('Gagal: ' + error.message, 'error'); return; }
+          CVSUI.toast('Dihapus', 'success');
+          await load();
+        }
+
+        document.getElementById('filter-date').addEventListener('change', load);
+        document.getElementById('filter-emp').addEventListener('input', load);
+        document.getElementById('filter-status').addEventListener('change', load);
+        if (isStaff) {
+          document.getElementById('btn-add').addEventListener('click', openAdd);
+          document.getElementById('btn-import').addEventListener('click', openImport);
+        }
+        document.getElementById('tb').addEventListener('click', (e) => {
+          const id = e.target.getAttribute('data-del');
+          if (id) del(id);
+        });
+
+        await load();
+      }
+    });
+  </script>
+</body>
+</html>

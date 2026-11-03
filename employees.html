@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Karyawan — CVS</title>
+  <link rel="stylesheet" href="/assets/css/main.css" />
+  <link rel="stylesheet" href="/assets/css/components.css" />
+  <link rel="stylesheet" href="/assets/css/layout.css" />
+  <script>window.__ENV__ = window.__ENV__ || {};</script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="/assets/js/config.js"></script>
+  <script src="/assets/js/supabaseClient.js"></script>
+  <script src="/assets/js/auth.js"></script>
+  <script src="/assets/js/ui.js"></script>
+  <script src="/assets/js/utils.js"></script>
+  <script src="/assets/js/app-shell.js"></script>
+</head>
+<body>
+  <div id="app"></div>
+  <script>
+    CVSAppShell.mount({
+      title: 'Manajemen Karyawan',
+      requiredRoles: ['admin','operator','viewer'],
+      onReady: async (profile) => {
+        const isAdmin = profile.role === 'admin';
+        const sb = window.cvsSupabase;
+        const main = document.getElementById('main-content');
+        const topbarActions = document.getElementById('topbar-actions');
+
+        main.innerHTML =
+          '<div class="card">' +
+            '<div class="card-header">' +
+              '<h3 class="card-title">Daftar Karyawan</h3>' +
+              (isAdmin ?
+                '<button class="btn btn-primary btn-sm" id="btn-add">Tambah Karyawan</button>' : ''
+              ) +
+            '</div>' +
+            '<div class="filter-row">' +
+              '<input type="text" id="filter-q" placeholder="Cari nama / ID / departemen" style="flex:1;min-width:180px" />' +
+              '<select id="filter-status">' +
+                '<option value="">Semua status</option>' +
+                '<option value="active">Active</option>' +
+                '<option value="contract">Contract</option>' +
+                '<option value="inactive">Inactive</option>' +
+                '<option value="resigned">Resigned</option>' +
+              '</select>' +
+              (isAdmin ?
+                '<button class="btn btn-sm" id="btn-import">Import CSV</button>' : ''
+              ) +
+            '</div>' +
+            '<div class="table-wrap">' +
+              '<table class="data-table"><thead><tr>' +
+                '<th>Employee ID</th><th>Nama</th><th>Departemen</th><th>Posisi</th>' +
+                '<th>Shift</th><th>Status</th><th id="th-actions"></th>' +
+              '</tr></thead><tbody id="tb"></tbody></table>' +
+            '</div>' +
+          '</div>';
+
+        if (isAdmin) {
+          document.getElementById('th-actions').textContent = 'Aksi';
+          topbarActions.innerHTML = '';
+        }
+
+        let rows = [];
+
+        async function load() {
+          const tb = document.getElementById('tb');
+          tb.innerHTML = '<tr><td colspan="7" class="empty-state">Memuat…</td></tr>';
+          let q = sb.from('employees').select('*').order('full_name', { ascending: true });
+          const status = document.getElementById('filter-status').value;
+          if (status) q = q.eq('employment_status', status);
+          const { data, error } = await q;
+          if (error) {
+            tb.innerHTML = '<tr><td colspan="7" class="empty-state">' +
+              CVSUI.escapeHtml(error.message) + '</td></tr>';
+            return;
+          }
+          rows = data || [];
+          applyFilter();
+        }
+
+        function applyFilter() {
+          const q = document.getElementById('filter-q').value.trim().toLowerCase();
+          const filtered = rows.filter(r => {
+            if (!q) return true;
+            return (
+              (r.employee_id || '').toLowerCase().includes(q) ||
+              (r.full_name || '').toLowerCase().includes(q) ||
+              (r.department || '').toLowerCase().includes(q)
+            );
+          });
+          render(filtered);
+        }
+
+        function statusBadge(s) {
+          const map = { active:'success', contract:'info', inactive:'muted', resigned:'danger' };
+          return '<span class="badge badge-' + (map[s] || 'muted') + '">' + CVSUI.escapeHtml(s) + '</span>';
+        }
+
+        function render(list) {
+          const tb = document.getElementById('tb');
+          if (!list.length) {
+            tb.innerHTML = '<tr><td colspan="7" class="empty-state">Tidak ada data.</td></tr>';
+            return;
+          }
+          tb.innerHTML = list.map(r =>
+            '<tr>' +
+              '<td><code>' + CVSUI.escapeHtml(r.employee_id) + '</code></td>' +
+              '<td>' + CVSUI.escapeHtml(r.full_name) + '</td>' +
+              '<td>' + CVSUI.escapeHtml(r.department || '') + '</td>' +
+              '<td>' + CVSUI.escapeHtml(r.position || '') + '</td>' +
+              '<td>' + CVSUI.escapeHtml(r.shift) + '</td>' +
+              '<td>' + statusBadge(r.employment_status) + '</td>' +
+              '<td>' +
+                (isAdmin ?
+                  '<button class="btn btn-sm" data-edit="' + r.employee_id + '">Edit</button> ' +
+                  (r.employment_status !== 'resigned' ?
+                    '<button class="btn btn-sm btn-danger" data-deactivate="' + r.employee_id + '">Nonaktifkan</button>' :
+                    '<button class="btn btn-sm" data-activate="' + r.employee_id + '">Aktifkan</button>') :
+                  '—') +
+              '</td>' +
+            '</tr>'
+          ).join('');
+        }
+
+        function employeeForm(row) {
+          row = row || {};
+          return '<div class="form-grid">' +
+            '<div class="form-row full"><label>Employee ID</label>' +
+              '<input type="text" id="f-employee_id" value="' + CVSUI.escapeHtml(row.employee_id || '') + '" ' +
+              (row.employee_id ? 'readonly' : '') + ' required /></div>' +
+            '<div class="form-row full"><label>Nama Lengkap</label>' +
+              '<input type="text" id="f-full_name" value="' + CVSUI.escapeHtml(row.full_name || '') + '" required /></div>' +
+            '<div class="form-row"><label>Departemen</label>' +
+              '<input type="text" id="f-department" value="' + CVSUI.escapeHtml(row.department || '') + '" /></div>' +
+            '<div class="form-row"><label>Posisi</label>' +
+              '<input type="text" id="f-position" value="' + CVSUI.escapeHtml(row.position || '') + '" /></div>' +
+            '<div class="form-row"><label>Shift</label>' +
+              '<select id="f-shift">' +
+                ['day','night','morning','evening','off'].map(s =>
+                  '<option value="' + s + '"' + (row.shift === s ? ' selected' : '') + '>' + s + '</option>'
+                ).join('') +
+              '</select></div>' +
+            '<div class="form-row"><label>Status</label>' +
+              '<select id="f-employment_status">' +
+                ['active','contract','inactive','resigned'].map(s =>
+                  '<option value="' + s + '"' + (row.employment_status === s ? ' selected' : '') + '>' + s + '</option>'
+                ).join('') +
+              '</select></div>' +
+          '</div>';
+        }
+
+        function readForm() {
+          return {
+            employee_id: document.getElementById('f-employee_id').value.trim(),
+            full_name: document.getElementById('f-full_name').value.trim(),
+            department: document.getElementById('f-department').value.trim() || null,
+            position: document.getElementById('f-position').value.trim() || null,
+            shift: document.getElementById('f-shift').value,
+            employment_status: document.getElementById('f-employment_status').value
+          };
+        }
+
+        async function openAdd() {
+          const ok = await CVSUI.modal({
+            title: 'Tambah Karyawan',
+            bodyHtml: employeeForm({}),
+            okText: 'Simpan',
+            onOk: async () => {
+              const data = readForm();
+              if (!data.employee_id || !data.full_name) {
+                CVSUI.toast('Employee ID dan Nama wajib diisi', 'error');
+                return false;
+              }
+              const { error } = await sb.from('employees').insert(data);
+              if (error) { CVSUI.toast('Gagal: ' + error.message, 'error'); return false; }
+              CVSUI.toast('Karyawan ditambahkan', 'success');
+              await load();
+              return true;
+            }
+          });
+          if (ok === undefined) return;
+        }
+
+        async function openEdit(employee_id) {
+          const row = rows.find(r => r.employee_id === employee_id);
+          if (!row) return;
+          await CVSUI.modal({
+            title: 'Edit Karyawan',
+            bodyHtml: employeeForm(row),
+            okText: 'Simpan',
+            onOk: async () => {
+              const data = readForm();
+              delete data.employee_id;
+              const { error } = await sb.from('employees').update(data).eq('employee_id', employee_id);
+              if (error) { CVSUI.toast('Gagal: ' + error.message, 'error'); return false; }
+              CVSUI.toast('Perubahan tersimpan', 'success');
+              await load();
+              return true;
+            }
+          });
+        }
+
+        async function setStatus(employee_id, status) {
+          const { error } = await sb.from('employees').update({ employment_status: status }).eq('employee_id', employee_id);
+          if (error) { CVSUI.toast('Gagal: ' + error.message, 'error'); return; }
+          CVSUI.toast('Status diperbarui', 'success');
+          await load();
+        }
+
+        async function openImport() {
+          await CVSUI.modal({
+            title: 'Import CSV Karyawan',
+            bodyHtml:
+              '<p class="text-sm text-muted">Format kolom: <code>employee_id,full_name,department,position,shift,employment_status</code></p>' +
+              '<div class="form-row"><label>File CSV</label><input type="file" id="f-csv" accept=".csv,text/csv" /></div>' +
+              '<div id="import-summary" class="mt-2 text-sm"></div>',
+            okText: 'Proses',
+            onOk: async (backdrop) => {
+              const input = backdrop.querySelector('#f-csv');
+              const summary = backdrop.querySelector('#import-summary');
+              if (!input.files || !input.files[0]) {
+                summary.innerHTML = '<span style="color:var(--c-danger)">Pilih file CSV dulu.</span>';
+                return false;
+              }
+              try {
+                const text = await input.files[0].text();
+                const rowsCsv = CVSUtils.parseCSV(text);
+                if (rowsCsv.length === 0) {
+                  summary.innerHTML = '<span style="color:var(--c-danger)">File CSV kosong.</span>';
+                  return false;
+                }
+                const required = ['employee_id','full_name'];
+                for (const k of required) {
+                  if (!(k in rowsCsv[0])) {
+                    summary.innerHTML = '<span style="color:var(--c-danger)">Kolom wajib tidak ada: ' + k + '</span>';
+                    return false;
+                  }
+                }
+                const payload = rowsCsv.map(r => ({
+                  employee_id: (r.employee_id || '').trim(),
+                  full_name: (r.full_name || '').trim(),
+                  department: (r.department || '').trim() || null,
+                  position: (r.position || '').trim() || null,
+                  shift: (r.shift || 'day').trim(),
+                  employment_status: (r.employment_status || 'active').trim()
+                })).filter(r => r.employee_id && r.full_name);
+
+                // Cek duplikat di payload
+                const ids = new Set();
+                const dup = new Set();
+                payload.forEach(p => {
+                  if (ids.has(p.employee_id)) dup.add(p.employee_id);
+                  ids.add(p.employee_id);
+                });
+                if (dup.size > 0) {
+                  summary.innerHTML = '<span style="color:var(--c-danger)">Duplikat ID di CSV: ' +
+                    [...dup].join(', ') + '</span>';
+                  return false;
+                }
+
+                CVSUI.showLoading(true);
+                // Cek ID yang sudah ada di DB
+                const { data: existing, error: e1 } = await sb
+                  .from('employees').select('employee_id').in('employee_id', [...ids]);
+                if (e1) {
+                  CVSUI.showLoading(false);
+                  summary.innerHTML = '<span style="color:var(--c-danger)">' + CVSUI.escapeHtml(e1.message) + '</span>';
+                  return false;
+                }
+                const existIds = new Set((existing || []).map(x => x.employee_id));
+                const toInsert = payload.filter(p => !existIds.has(p.employee_id));
+                const skipped = payload.length - toInsert.length;
+
+                if (toInsert.length > 0) {
+                  const { error: e2 } = await sb.from('employees').insert(toInsert);
+                  CVSUI.showLoading(false);
+                  if (e2) {
+                    summary.innerHTML = '<span style="color:var(--c-danger)">' + CVSUI.escapeHtml(e2.message) + '</span>';
+                    return false;
+                  }
+                } else {
+                  CVSUI.showLoading(false);
+                }
+
+                CVSUI.toast('Import selesai. Baru: ' + toInsert.length + ', dilewati (duplikat): ' + skipped, 'success');
+                await load();
+                return true;
+              } catch (err) {
+                CVSUI.showLoading(false);
+                summary.innerHTML = '<span style="color:var(--c-danger)">' + CVSUI.escapeHtml(err.message) + '</span>';
+                return false;
+              }
+            }
+          });
+        }
+
+        // Bindings
+        document.getElementById('filter-q').addEventListener('input', applyFilter);
+        document.getElementById('filter-status').addEventListener('change', load);
+        if (isAdmin) {
+          document.getElementById('btn-add').addEventListener('click', openAdd);
+          document.getElementById('btn-import').addEventListener('click', openImport);
+        }
+
+        document.getElementById('tb').addEventListener('click', async (e) => {
+          const edit = e.target.getAttribute('data-edit');
+          const deact = e.target.getAttribute('data-deactivate');
+          const act = e.target.getAttribute('data-activate');
+          if (edit) return openEdit(edit);
+          if (deact) {
+            if (await CVSUI.confirmDialog('Nonaktifkan karyawan ' + deact + '?', { okText: 'Nonaktifkan' })) {
+              await setStatus(deact, 'resigned');
+            }
+          }
+          if (act) {
+            if (await CVSUI.confirmDialog('Aktifkan kembali ' + act + '?', { okText: 'Aktifkan' })) {
+              await setStatus(act, 'active');
+            }
+          }
+        });
+
+        await load();
+      }
+    });
+  </script>
+</body>
+</html>

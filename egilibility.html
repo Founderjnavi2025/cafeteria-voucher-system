@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Slot & Aturan — CVS</title>
+  <link rel="stylesheet" href="/assets/css/main.css" />
+  <link rel="stylesheet" href="/assets/css/components.css" />
+  <link rel="stylesheet" href="/assets/css/layout.css" />
+  <script>window.__ENV__ = window.__ENV__ || {};</script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="/assets/js/config.js"></script>
+  <script src="/assets/js/supabaseClient.js"></script>
+  <script src="/assets/js/auth.js"></script>
+  <script src="/assets/js/ui.js"></script>
+  <script src="/assets/js/utils.js"></script>
+  <script src="/assets/js/app-shell.js"></script>
+</head>
+<body>
+  <div id="app"></div>
+  <script>
+    CVSAppShell.mount({
+      title: 'Slot & Aturan Kelayakan',
+      requiredRoles: ['admin','operator','viewer'],
+      onReady: async (profile) => {
+        const isAdmin = profile.role === 'admin';
+        const sb = window.cvsSupabase;
+        const main = document.getElementById('main-content');
+
+        main.innerHTML =
+          '<div class="card">' +
+            '<div class="card-header">' +
+              '<h3 class="card-title">Slot Makan</h3>' +
+              (isAdmin ? '<button class="btn btn-sm btn-primary" id="btn-add-sched">Tambah Slot</button>' : '') +
+            '</div>' +
+            '<div class="table-wrap">' +
+              '<table class="data-table"><thead><tr>' +
+                '<th>Kode</th><th>Nama</th><th>Mulai</th><th>Selesai</th><th>Status</th><th id="th-act-sched"></th>' +
+              '</tr></thead><tbody id="tb-sched"></tbody></table>' +
+            '</div>' +
+          '</div>' +
+          '<div class="card">' +
+            '<div class="card-header">' +
+              '<h3 class="card-title">Aturan Kelayakan</h3>' +
+              (isAdmin ? '<button class="btn btn-sm btn-primary" id="btn-add-rule">Tambah Aturan</button>' : '') +
+            '</div>' +
+            '<div class="table-wrap">' +
+              '<table class="data-table"><thead><tr>' +
+                '<th>Nama</th><th>Slot</th><th>Dept</th><th>Shift</th><th>Status Karyawan</th>' +
+                '<th>Status Absensi Dibutuhkan</th><th>Prioritas</th><th id="th-act-rule"></th>' +
+              '</tr></thead><tbody id="tb-rule"></tbody></table>' +
+            '</div>' +
+          '</div>';
+
+        if (isAdmin) {
+          document.getElementById('th-act-sched').textContent = 'Aksi';
+          document.getElementById('th-act-rule').textContent = 'Aksi';
+        }
+
+        let schedules = [];
+        let rules = [];
+
+        async function loadSchedules() {
+          const tb = document.getElementById('tb-sched');
+          tb.innerHTML = '<tr><td colspan="6" class="empty-state">Memuat…</td></tr>';
+          const { data, error } = await sb.from('meal_schedules').select('*').order('start_time');
+          if (error) { tb.innerHTML = '<tr><td colspan="6" class="empty-state">' + CVSUI.escapeHtml(error.message) + '</td></tr>'; return; }
+          schedules = data || [];
+          if (!schedules.length) {
+            tb.innerHTML = '<tr><td colspan="6" class="empty-state">Belum ada slot.</td></tr>'; return;
+          }
+          tb.innerHTML = schedules.map(s =>
+            '<tr>' +
+              '<td><code>' + CVSUI.escapeHtml(s.code) + '</code></td>' +
+              '<td>' + CVSUI.escapeHtml(s.name) + '</td>' +
+              '<td>' + CVSUI.escapeHtml(s.start_time) + '</td>' +
+              '<td>' + CVSUI.escapeHtml(s.end_time) + '</td>' +
+              '<td>' + (s.is_active ? '<span class="badge badge-success">aktif</span>' : '<span class="badge badge-muted">nonaktif</span>') + '</td>' +
+              '<td>' + (isAdmin ? '<button class="btn btn-sm" data-edit-sched="' + s.id + '">Edit</button>' : '—') + '</td>' +
+            '</tr>'
+          ).join('');
+        }
+
+        async function loadRules() {
+          const tb = document.getElementById('tb-rule');
+          tb.innerHTML = '<tr><td colspan="8" class="empty-state">Memuat…</td></tr>';
+          const { data, error } = await sb.from('meal_eligibility').select('*').order('priority');
+          if (error) { tb.innerHTML = '<tr><td colspan="8" class="empty-state">' + CVSUI.escapeHtml(error.message) + '</td></tr>'; return; }
+          rules = data || [];
+          if (!rules.length) {
+            tb.innerHTML = '<tr><td colspan="8" class="empty-state">Belum ada aturan.</td></tr>'; return;
+          }
+          const schedMap = {};
+          schedules.forEach(s => { schedMap[s.id] = s.name; });
+          tb.innerHTML = rules.map(r =>
+            '<tr>' +
+              '<td>' + CVSUI.escapeHtml(r.name) + '</td>' +
+              '<td>' + CVSUI.escapeHtml(schedMap[r.meal_schedule_id] || '-') + '</td>' +
+              '<td>' + CVSUI.escapeHtml(r.applicable_department || '*') + '</td>' +
+              '<td>' + CVSUI.escapeHtml(r.applicable_shift || '*') + '</td>' +
+              '<td>' + CVSUI.escapeHtml(r.applicable_status || '*') + '</td>' +
+              '<td>' + CVSUI.escapeHtml((r.required_attendance_statuses || []).join(', ')) + '</td>' +
+              '<td>' + r.priority + '</td>' +
+              '<td>' + (isAdmin ? '<button class="btn btn-sm" data-edit-rule="' + r.id + '">Edit</button>' : '—') + '</td>' +
+            '</tr>'
+          ).join('');
+        }
+
+        function scheduleForm(row) {
+          row = row || {};
+          return '<div class="form-grid">' +
+            '<div class="form-row full"><label>Kode</label>' +
+              '<input type="text" id="s-code" value="' + CVSUI.escapeHtml(row.code || '') + '" ' + (row.id ? 'readonly' : '') + ' required /></div>' +
+            '<div class="form-row full"><label>Nama</label>' +
+              '<input type="text" id="s-name" value="' + CVSUI.escapeHtml(row.name || '') + '" required /></div>' +
+            '<div class="form-row"><label>Mulai</label>' +
+              '<input type="time" id="s-start" value="' + CVSUI.escapeHtml(row.start_time || '') + '" required /></div>' +
+            '<div class="form-row"><label>Selesai</label>' +
+              '<input type="time" id="s-end" value="' + CVSUI.escapeHtml(row.end_time || '') + '" required /></div>' +
+            '<div class="form-row full"><label><input type="checkbox" id="s-active" ' + (row.is_active === false ? '' : 'checked') + ' /> Aktif</label></div>' +
+          '</div>';
+        }
+
+        async function openAddSchedule() {
+          await CVSUI.modal({
+            title: 'Tambah Slot Makan', bodyHtml: scheduleForm({}), okText: 'Simpan',
+            onOk: async () => {
+              const payload = {
+                code: document.getElementById('s-code').value.trim(),
+                name: document.getElementById('s-name').value.trim(),
+                start_time: document.getElementById('s-start').value,
+                end_time: document.getElementById('s-end').value,
+                is_active: document.getElementById('s-active').checked
+              };
+              const { error } = await sb.from('meal_schedules').insert(payload);
+              if (error) { CVSUI.toast('Gagal: ' + error.message, 'error'); return false; }
+              CVSUI.toast('Slot ditambahkan', 'success');
+              await loadSchedules();
+              return true;
+            }
+          });
+        }
+
+        async function openEditSchedule(id) {
+          const row = schedules.find(x => x.id === id);
+          if (!row) return;
+          await CVSUI.modal({
+            title: 'Edit Slot Makan', bodyHtml: scheduleForm(row), okText: 'Simpan',
+            onOk: async () => {
+              const payload = {
+                name: document.getElementById('s-name').value.trim(),
+                start_time: document.getElementById('s-start').value,
+                end_time: document.getElementById('s-end').value,
+                is_active: document.getElementById('s-active').checked
+              };
+              const { error } = await sb.from('meal_schedules').update(payload).eq('id', id);
+              if (error) { CVSUI.toast('Gagal: ' + error.message, 'error'); return false; }
+              CVSUI.toast('Tersimpan', 'success');
+              await loadSchedules();
+              return true;
+            }
+          });
+        }
+
+        function ruleForm(row) {
+          row = row || {};
+          const statuses = ['present','late','absent','leave','sick','holiday'];
+          const req = row.required_attendance_statuses || ['present','late'];
+          return '<div class="form-grid">' +
+            '<div class="form-row full"><label>Nama</label>' +
+              '<input type="text" id="r-name" value="' + CVSUI.escapeHtml(row.name || '') + '" required /></div>' +
+            '<div class="form-row full"><label>Slot</label>' +
+              '<select id="r-sched">' +
+                schedules.map(s =>
+                  '<option value="' + s.id + '"' + (row.meal_schedule_id === s.id ? ' selected' : '') + '>' +
+                  CVSUI.escapeHtml(s.name) + '</option>').join('') +
+              '</select></div>' +
+            '<div class="form-row"><label>Dept (kosong = semua)</label>' +
+              '<input type="text" id="r-dept" value="' + CVSUI.escapeHtml(row.applicable_department || '') + '" /></div>' +
+            '<div class="form-row"><label>Shift (kosong = semua)</label>' +
+              '<select id="r-shift">' +
+                '<option value="">*</option>' +
+                ['day','night','morning','evening','off'].map(s =>
+                  '<option value="' + s + '"' + (row.applicable_shift === s ? ' selected' : '') + '>' + s + '</option>').join('') +
+              '</select></div>' +
+            '<div class="form-row"><label>Status karyawan (kosong = semua)</label>' +
+              '<select id="r-status">' +
+                '<option value="">*</option>' +
+                ['active','contract','inactive','resigned'].map(s =>
+                  '<option value="' + s + '"' + (row.applicable_status === s ? ' selected' : '') + '>' + s + '</option>').join('') +
+              '</select></div>' +
+            '<div class="form-row"><label>Prioritas</label>' +
+              '<input type="number" id="r-priority" value="' + (row.priority || 100) + '" min="0" required /></div>' +
+            '<div class="form-row full"><label>Status absensi yang memenuhi syarat</label>' +
+              '<div class="flex flex-wrap gap-2">' +
+                statuses.map(s => {
+                  const checked = req.includes(s) ? 'checked' : '';
+                  return '<label style="font-size:.85rem"><input type="checkbox" data-req="' + s + '" ' + checked + '/> ' + s + '</label>';
+                }).join('') +
+              '</div></div>' +
+            '<div class="form-row full"><label><input type="checkbox" id="r-active" ' + (row.is_active === false ? '' : 'checked') + ' /> Aktif</label></div>' +
+          '</div>';
+        }
+
+        function readRuleForm() {
+          const statuses = [...document.querySelectorAll('[data-req]')]
+            .filter(cb => cb.checked)
+            .map(cb => cb.getAttribute('data-req'));
+          return {
+            name: document.getElementById('r-name').value.trim(),
+            meal_schedule_id: document.getElementById('r-sched').value,
+            applicable_department: document.getElementById('r-dept').value.trim() || null,
+            applicable_shift: document.getElementById('r-shift').value || null,
+            applicable_status: document.getElementById('r-status').value || null,
+            priority: parseInt(document.getElementById('r-priority').value, 10) || 100,
+            required_attendance_statuses: statuses,
+            is_active: document.getElementById('r-active').checked
+          };
+        }
+
+        async function openAddRule() {
+          await CVSUI.modal({
+            title: 'Tambah Aturan Kelayakan', bodyHtml: ruleForm({}), okText: 'Simpan',
+            onOk: async () => {
+              const payload = readRuleForm();
+              if (!payload.name || !payload.meal_schedule_id) {
+                CVSUI.toast('Nama dan slot wajib', 'error'); return false;
+              }
+              if (!payload.required_attendance_statuses.length) {
+                CVSUI.toast('Pilih minimal 1 status absensi', 'error'); return false;
+              }
+              const { error } = await sb.from('meal_eligibility').insert(payload);
+              if (error) { CVSUI.toast('Gagal: ' + error.message, 'error'); return false; }
+              CVSUI.toast('Aturan ditambahkan', 'success');
+              await loadRules();
+              return true;
+            }
+          });
+        }
+
+        async function openEditRule(id) {
+          const row = rules.find(x => x.id === id);
+          if (!row) return;
+          await CVSUI.modal({
+            title: 'Edit Aturan', bodyHtml: ruleForm(row), okText: 'Simpan',
+            onOk: async () => {
+              const payload = readRuleForm();
+              const { error } = await sb.from('meal_eligibility').update(payload).eq('id', id);
+              if (error) { CVSUI.toast('Gagal: ' + error.message, 'error'); return false; }
+              CVSUI.toast('Tersimpan', 'success');
+              await loadRules();
+              return true;
+            }
+          });
+        }
+
+        if (isAdmin) {
+          document.getElementById('btn-add-sched').addEventListener('click', openAddSchedule);
+          document.getElementById('btn-add-rule').addEventListener('click', openAddRule);
+        }
+        document.getElementById('tb-sched').addEventListener('click', (e) => {
+          const id = e.target.getAttribute('data-edit-sched');
+          if (id) openEditSchedule(id);
+        });
+        document.getElementById('tb-rule').addEventListener('click', (e) => {
+          const id = e.target.getAttribute('data-edit-rule');
+          if (id) openEditRule(id);
+        });
+
+        await loadSchedules();
+        await loadRules();
+      }
+    });
+  </script>
+</body>
+</html>

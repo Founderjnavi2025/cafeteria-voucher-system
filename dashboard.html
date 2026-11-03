@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard — CVS</title>
+  <link rel="stylesheet" href="/assets/css/main.css" />
+  <link rel="stylesheet" href="/assets/css/components.css" />
+  <link rel="stylesheet" href="/assets/css/layout.css" />
+  <script>window.__ENV__ = window.__ENV__ || {};</script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="/assets/js/config.js"></script>
+  <script src="/assets/js/supabaseClient.js"></script>
+  <script src="/assets/js/auth.js"></script>
+  <script src="/assets/js/ui.js"></script>
+  <script src="/assets/js/utils.js"></script>
+  <script src="/assets/js/app-shell.js"></script>
+</head>
+<body>
+  <div id="app"></div>
+  <script>
+    CVSAppShell.mount({
+      title: 'Dashboard',
+      requiredRoles: ['admin','operator','viewer'],
+      onReady: async (profile) => {
+        const main = document.getElementById('main-content');
+        const today = CVSUtils.todayLocalInputDate();
+        const sb = window.cvsSupabase;
+
+        main.innerHTML =
+          '<div class="grid-stats" id="stats">' +
+            '<div class="stat"><div class="label">Total Karyawan</div><div class="value" id="s-emp">…</div></div>' +
+            '<div class="stat"><div class="label">Hadir Hari Ini</div><div class="value" id="s-att">…</div></div>' +
+            '<div class="stat"><div class="label">Voucher Terbit Hari Ini</div><div class="value" id="s-vou">…</div></div>' +
+            '<div class="stat"><div class="label">Sudah Redeemed</div><div class="value" id="s-red">…</div></div>' +
+          '</div>' +
+          '<div class="card mt-4">' +
+            '<div class="card-header"><h3 class="card-title">Aktivitas Terbaru</h3></div>' +
+            '<div class="table-wrap">' +
+              '<table class="data-table"><thead><tr>' +
+                '<th>Waktu</th><th>Aksi</th><th>Entitas</th><th>Oleh</th>' +
+              '</tr></thead><tbody id="tb-activity">' +
+                '<tr><td colspan="4" class="empty-state">Memuat…</td></tr>' +
+              '</tbody></table>' +
+            '</div>' +
+          '</div>';
+
+        async function loadStats() {
+          try {
+            const [emp, att, vou, red] = await Promise.all([
+              sb.from('employees').select('*', { count: 'exact', head: true }),
+              sb.from('attendance').select('*', { count: 'exact', head: true })
+                .eq('attendance_date', today),
+              sb.from('vouchers').select('*', { count: 'exact', head: true })
+                .eq('voucher_date', today),
+              sb.from('vouchers').select('*', { count: 'exact', head: true })
+                .eq('voucher_date', today).eq('status', 'redeemed')
+            ]);
+
+            document.getElementById('s-emp').textContent = emp.count ?? 0;
+            document.getElementById('s-att').textContent = att.count ?? 0;
+            document.getElementById('s-vou').textContent = vou.count ?? 0;
+            document.getElementById('s-red').textContent = red.count ?? 0;
+          } catch (err) {
+            CVSUI.toast('Gagal memuat statistik: ' + err.message, 'error');
+          }
+        }
+
+        async function loadActivity() {
+          const tb = document.getElementById('tb-activity');
+          // Audit hanya bisa dibaca admin (RLS). Bila viewer/operator, tabel kosong.
+          const { data, error } = await sb
+            .from('audit_logs')
+            .select('id, created_at, action, entity_type, actor_id, metadata')
+            .order('created_at', { ascending: false })
+            .limit(15);
+          if (error) {
+            tb.innerHTML = '<tr><td colspan="4" class="empty-state">' +
+              CVSUI.escapeHtml(error.message) + '</td></tr>';
+            return;
+          }
+          if (!data || data.length === 0) {
+            tb.innerHTML = '<tr><td colspan="4" class="empty-state">Belum ada aktivitas.</td></tr>';
+            return;
+          }
+          const actorIds = [...new Set(data.map(d => d.actor_id).filter(Boolean))];
+          let actors = {};
+          if (actorIds.length) {
+            const { data: profs } = await sb
+              .from('profiles').select('id, full_name, email').in('id', actorIds);
+            (profs || []).forEach(p => { actors[p.id] = p; });
+          }
+          tb.innerHTML = data.map(row => {
+            const actor = row.actor_id && actors[row.actor_id]
+              ? (actors[row.actor_id].full_name || actors[row.actor_id].email)
+              : '—';
+            return '<tr>' +
+              '<td>' + CVSUI.formatDateTime(row.created_at) + '</td>' +
+              '<td>' + CVSUI.escapeHtml(row.action) + '</td>' +
+              '<td>' + CVSUI.escapeHtml(row.entity_type || '') + '</td>' +
+              '<td>' + CVSUI.escapeHtml(actor) + '</td>' +
+            '</tr>';
+          }).join('');
+        }
+
+        await loadStats();
+        await loadActivity();
+      }
+    });
+  </script>
+</body>
+</html>
