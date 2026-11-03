@@ -13,11 +13,11 @@
     console.error('[CVS] Supabase library belum dimuat dari CDN.');
     return;
   }
-  if (!cfg.SUPABASE_URL || cfg.SUPABASE_URL.includes('https://yyztsmdanfkshudchfjr.supabase.co')) {
+  if (!cfg.SUPABASE_URL || cfg.SUPABASE_URL.includes('YOUR_')) {
     console.error('[CVS] SUPABASE_URL belum dikonfigurasi.');
     return;
   }
-  if (!cfg.SUPABASE_ANON_KEY || cfg.SUPABASE_ANON_KEY.includes('sb_publishable_869TfCnLdbd3nchgS4st0A_DpPJ3HqO')) {
+  if (!cfg.SUPABASE_ANON_KEY || cfg.SUPABASE_ANON_KEY.includes('YOUR_')) {
     console.error('[CVS] SUPABASE_ANON_KEY belum dikonfigurasi.');
     return;
   }
