@@ -1,0 +1,91 @@
+# ============================================================
+# Cafeteria Voucher System (CVS) — .gitignore
+# ============================================================
+
+# ---------- Dependencies (jika nanti ada npm) ----------
+node_modules/
+package-lock.json.bak
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# ---------- Environment & Secrets ----------
+# JANGAN pernah commit file berisi kredensial Supabase, service_role key,
+# password DB, atau token lain.
+.env
+.env.*
+!.env.example
+*.env
+*.local
+
+# File konfigurasi runtime (anon key & URL Supabase)
+# Untuk development: pakai env Vercel atau isi manual di assets/js/config.js
+# (file config.js dengan nilai REAL JANGAN di-commit bila berisi anon key +
+#  custom setting; commit hanya template-nya).
+assets/js/env.js
+assets/js/config.local.js
+supabase/.env
+supabase/.temp/
+
+# ---------- Supabase (lokal & secret) ----------
+supabase/.branches/
+supabase/.temp/
+*.supabase-token
+.supabase/
+
+# ---------- Vercel ----------
+.vercel/
+.vercelignore
+
+# ---------- Logs ----------
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# ---------- OS / Editor ----------
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json.example
+.idea/
+*.swp
+*.swo
+*~
+.vim/
+
+# ---------- Build artifacts (jika nanti perlu) ----------
+dist/
+build/
+.cache/
+.tmp/
+out/
+
+# ---------- Coverage & Testing artifacts ----------
+coverage/
+.nyc_output/
+*.lcov
+
+# ---------- Backup / dump ----------
+*.dump
+*.sql.gz
+backup_*.sql
+!supabase/migrations/*.sql
+
+# ---------- Dokumentasi sementara / catatan pribadi ----------
+NOTES.md
+TODO.local.md
+*.scratch.md
